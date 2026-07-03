@@ -15,7 +15,8 @@ async function initProductPage() {
   }
 
   try {
-    const product = await csFetchEntryByUrl("product", `/${slug}`);
+    const products = await csFetchEntries("product");
+    const product = products.find((p) => slugify(p.title) === slug);
     if (!product) {
       container.innerHTML = `<div class="empty-state">Couldn't find that phone. It may have been unpublished in Contentstack.</div>`;
       return;
