@@ -69,6 +69,15 @@ function formatPrice(amount) {
   }).format(amount);
 }
 
+function slugify(str) {
+  return (str || "")
+    .toString()
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+}
+
 function renderErrorBanner(message) {
   const el = document.createElement("div");
   el.className = "cs-error-banner";
