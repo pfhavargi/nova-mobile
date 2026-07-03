@@ -14,7 +14,7 @@
 
 const CONFIG = {
   // Set to false once your Contentstack stack is ready
-  USE_MOCK_DATA: true,
+  USE_MOCK_DATA: false,
 
   // Stack API Key -> Settings > Stack > API Key
   API_KEY: "blt30fddd08d040f1f8",
