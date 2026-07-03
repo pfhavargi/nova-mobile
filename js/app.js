@@ -1,7 +1,5 @@
 /* ============================================================
    HOMEPAGE LOGIC
-   Fetches the hero_banner and product entries from Contentstack
-   (or mock data) and renders them into index.html
    ============================================================ */
 
 let ALL_PRODUCTS = [];
@@ -90,7 +88,7 @@ function renderCatalog(el, products) {
 
 function productCardHtml(p) {
   const imageUrl = p.image && p.image.url ? p.image.url : "https://placehold.co/600x700/1D2027/F5F3EF?text=No+Image";
-  const slug = const slug = slugify(p.title);
+  const slug = slugify(p.title);
   return `
     <a class="spec-ticket" href="product.html?slug=${encodeURIComponent(slug)}">
       ${p.featured ? '<span class="featured-tag">Featured</span>' : ""}
