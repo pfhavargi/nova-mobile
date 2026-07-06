@@ -46,7 +46,7 @@ async function setPreferredBrand(brand) {
         "x-cs-personalize-user-uid": getVisitorUid(),
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ preferred_brand: brand }),
+      body: JSON.stringify({ PREFERRED_BRAND: brand }),
     });
   } catch (err) {
     console.warn("Personalize set attribute failed:", err);
