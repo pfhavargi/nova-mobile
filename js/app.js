@@ -1,28 +1,29 @@
 /* ============================================================
    HOMEPAGE LOGIC
    ============================================================ */
-
+ 
 let ALL_PRODUCTS = [];
 let ACTIVE_BRAND = "All";
-
+let PREFERRED_BRAND = getStoredPreferredBrand();
+ 
 async function initHomepage() {
   const heroEl = document.getElementById("hero-content");
   const featuredGrid = document.getElementById("featured-grid");
   const catalogGrid = document.getElementById("catalog-grid");
   const filterRow = document.getElementById("filter-row");
-
+ 
   try {
     const manifest = await fetchPersonalizeManifest();
     const variantAliases = getVariantAliasesFromManifest(manifest);
-
+ 
     const [heroEntries, products] = await Promise.all([
       csFetchEntries("hero_banner", variantAliases),
       csFetchEntries("product"),
     ]);
-
+ 
     const hero = heroEntries[0] || MOCK_HERO;
     renderHero(heroEl, hero);
-
+ 
     ALL_PRODUCTS = products;
     renderFilterPills(filterRow, products);
     renderFeatured(featuredGrid, products);
@@ -34,7 +35,7 @@ async function initHomepage() {
     renderHero(heroEl, MOCK_HERO);
   }
 }
-
+ 
 function renderHero(el, hero) {
   el.innerHTML = `
     <span class="hero-eyebrow">New arrivals every week</span>
@@ -49,7 +50,7 @@ function renderHero(el, hero) {
     document.querySelector(".hero").style.backgroundPosition = "center";
   }
 }
-
+ 
 function renderFilterPills(el, products) {
   const brands = ["All", ...new Set(products.map((p) => p.brand))];
   el.innerHTML = brands
@@ -58,28 +59,38 @@ function renderFilterPills(el, products) {
         `<button class="filter-pill ${brand === ACTIVE_BRAND ? "active" : ""}" data-brand="${brand}">${brand}</button>`
     )
     .join("");
-
+ 
   el.querySelectorAll(".filter-pill").forEach((pill) => {
     pill.addEventListener("click", async () => {
       ACTIVE_BRAND = pill.dataset.brand;
       el.querySelectorAll(".filter-pill").forEach((p) => p.classList.remove("active"));
       pill.classList.add("active");
-      renderCatalog(document.getElementById("catalog-grid"), ALL_PRODUCTS);
-
+ 
       if (ACTIVE_BRAND !== "All") {
+        // Reorder + highlight instantly using local storage — no waiting
+        PREFERRED_BRAND = ACTIVE_BRAND;
+        renderFeatured(document.getElementById("featured-grid"), ALL_PRODUCTS);
+        renderCatalog(document.getElementById("catalog-grid"), ALL_PRODUCTS);
         await refreshPersonalizedHero(ACTIVE_BRAND);
+      } else {
+        renderCatalog(document.getElementById("catalog-grid"), ALL_PRODUCTS);
       }
     });
   });
 }
-
+ 
+function sortByPreferred(products) {
+  if (!PREFERRED_BRAND) return products;
+  return [...products].sort((a, b) => (b.brand === PREFERRED_BRAND) - (a.brand === PREFERRED_BRAND));
+}
+ 
 async function refreshPersonalizedHero(brand) {
   const heroEl = document.getElementById("hero-content");
   const heroSection = document.querySelector(".hero");
-
+ 
   heroSection.classList.add("hero-updating");
   await setPreferredBrand(brand);
-
+ 
   let hero = null;
   for (let attempt = 0; attempt < 6; attempt++) {
     await new Promise((r) => setTimeout(r, 400));
@@ -93,7 +104,7 @@ async function refreshPersonalizedHero(brand) {
       }
     }
   }
-
+ 
   heroSection.classList.remove("hero-updating");
   if (hero) {
     renderHero(heroEl, hero);
@@ -101,37 +112,41 @@ async function refreshPersonalizedHero(brand) {
     setTimeout(() => heroSection.classList.remove("hero-flash"), 900);
   }
 }
-
+ 
 function renderFeatured(el, products) {
-  const featured = products.filter((p) => p.featured);
+  const featured = sortByPreferred(products.filter((p) => p.featured));
   if (featured.length === 0) {
     el.closest("section").style.display = "none";
     return;
   }
+  el.closest("section").style.display = "";
   el.innerHTML = featured.map(productCardHtml).join("");
 }
-
+ 
 function renderCatalog(el, products) {
   const filtered = ACTIVE_BRAND === "All" ? products : products.filter((p) => p.brand === ACTIVE_BRAND);
-  document.getElementById("catalog-count").textContent = `${filtered.length} model${filtered.length === 1 ? "" : "s"}`;
-
-  if (filtered.length === 0) {
+  const sorted = sortByPreferred(filtered);
+  document.getElementById("catalog-count").textContent = `${sorted.length} model${sorted.length === 1 ? "" : "s"}`;
+ 
+  if (sorted.length === 0) {
     el.innerHTML = `<div class="empty-state">No phones in this brand yet — add an entry in Contentstack to see it here.</div>`;
     return;
   }
-  el.innerHTML = filtered.map(productCardHtml).join("");
+  el.innerHTML = sorted.map(productCardHtml).join("");
 }
-
+ 
 function productCardHtml(p) {
   const imageUrl = p.image && p.image.url ? p.image.url : "https://placehold.co/600x700/1D2027/F5F3EF?text=No+Image";
   const slug = slugify(p.title);
+  const isPreferred = PREFERRED_BRAND && p.brand === PREFERRED_BRAND;
   return `
-    <a class="spec-ticket" href="product.html?slug=${encodeURIComponent(slug)}" data-brand="${p.brand}">
+    <a class="spec-ticket ${isPreferred ? "preferred" : ""}" href="product.html?slug=${encodeURIComponent(slug)}" data-brand="${p.brand}">
       ${p.featured ? '<span class="featured-tag">Featured</span>' : ""}
       <span class="brand-tag">${p.brand}</span>
       <img class="ticket-image" src="${imageUrl}" alt="${p.title}" loading="lazy" />
       <div class="ticket-perforation"></div>
       <div class="ticket-body">
+        ${isPreferred ? '<span class="preferred-tag">★ Picked for you</span>' : ""}
         <h3>${p.title}</h3>
         <div class="ticket-specs">${p.specs || ""}</div>
         <div class="ticket-price">
@@ -142,12 +157,13 @@ function productCardHtml(p) {
     </a>
   `;
 }
-
+ 
 document.addEventListener("click", (e) => {
   const card = e.target.closest(".spec-ticket");
   if (card && card.dataset.brand) {
     setPreferredBrand(card.dataset.brand);
   }
 });
-
+ 
 document.addEventListener("DOMContentLoaded", initHomepage);
+ 
