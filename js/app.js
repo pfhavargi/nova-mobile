@@ -12,8 +12,11 @@ async function initHomepage() {
   const filterRow = document.getElementById("filter-row");
 
   try {
+    const manifest = await fetchPersonalizeManifest();
+    const variantAliases = getVariantAliasesFromManifest(manifest);
+
     const [heroEntries, products] = await Promise.all([
-      csFetchEntries("hero_banner"),
+      csFetchEntries("hero_banner", variantAliases),
       csFetchEntries("product"),
     ]);
 
@@ -57,11 +60,15 @@ function renderFilterPills(el, products) {
     .join("");
 
   el.querySelectorAll(".filter-pill").forEach((pill) => {
-    pill.addEventListener("click", () => {
+    pill.addEventListener("click", async () => {
       ACTIVE_BRAND = pill.dataset.brand;
       el.querySelectorAll(".filter-pill").forEach((p) => p.classList.remove("active"));
       pill.classList.add("active");
       renderCatalog(document.getElementById("catalog-grid"), ALL_PRODUCTS);
+
+      if (ACTIVE_BRAND !== "All") {
+        await setPreferredBrand(ACTIVE_BRAND);
+      }
     });
   });
 }
@@ -90,7 +97,7 @@ function productCardHtml(p) {
   const imageUrl = p.image && p.image.url ? p.image.url : "https://placehold.co/600x700/1D2027/F5F3EF?text=No+Image";
   const slug = slugify(p.title);
   return `
-    <a class="spec-ticket" href="product.html?slug=${encodeURIComponent(slug)}">
+    <a class="spec-ticket" href="product.html?slug=${encodeURIComponent(slug)}" data-brand="${p.brand}">
       ${p.featured ? '<span class="featured-tag">Featured</span>' : ""}
       <span class="brand-tag">${p.brand}</span>
       <img class="ticket-image" src="${imageUrl}" alt="${p.title}" loading="lazy" />
@@ -106,5 +113,12 @@ function productCardHtml(p) {
     </a>
   `;
 }
+
+document.addEventListener("click", (e) => {
+  const card = e.target.closest(".spec-ticket");
+  if (card && card.dataset.brand) {
+    setPreferredBrand(card.dataset.brand);
+  }
+});
 
 document.addEventListener("DOMContentLoaded", initHomepage);
