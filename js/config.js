@@ -31,6 +31,10 @@ const CONFIG = {
   // "azure-na"  -> https://azure-na-cdn.contentstack.com
   // "azure-eu"  -> https://azure-eu-cdn.contentstack.com
   REGION: "us",
+
+  ENABLE_PERSONALIZE: true,
+  PERSONALIZE_PROJECT_UID: "YOUR_PERSONALIZE_PROJECT_UID",
+  PERSONALIZE_EDGE_URL: "https://personalize-edge.contentstack.com",
 };
 
 const REGION_BASE_URLS = {
