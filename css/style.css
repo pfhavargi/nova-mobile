@@ -477,3 +477,15 @@ a { color: inherit; text-decoration: none; }
 .hero.hero-flash {
   box-shadow: inset 0 0 0 2px var(--amber);
 }
+/* ---------- Preferred brand highlight ---------- */
+.spec-ticket.preferred {
+  border-color: var(--amber);
+  box-shadow: 0 0 0 1px var(--amber);
+}
+
+.preferred-tag {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  color: var(--amber);
+  letter-spacing: 0.03em;
+}
