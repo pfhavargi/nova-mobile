@@ -67,10 +67,39 @@ function renderFilterPills(el, products) {
       renderCatalog(document.getElementById("catalog-grid"), ALL_PRODUCTS);
 
       if (ACTIVE_BRAND !== "All") {
-        await setPreferredBrand(ACTIVE_BRAND);
+        await refreshPersonalizedHero(ACTIVE_BRAND);
       }
     });
   });
+}
+
+async function refreshPersonalizedHero(brand) {
+  const heroEl = document.getElementById("hero-content");
+  const heroSection = document.querySelector(".hero");
+
+  heroSection.classList.add("hero-updating");
+  await setPreferredBrand(brand);
+
+  let hero = null;
+  for (let attempt = 0; attempt < 6; attempt++) {
+    await new Promise((r) => setTimeout(r, 400));
+    const manifest = await fetchPersonalizeManifest();
+    const aliases = getVariantAliasesFromManifest(manifest);
+    if (aliases.length > 0) {
+      const entries = await csFetchEntries("hero_banner", aliases);
+      if (entries[0]) {
+        hero = entries[0];
+        break;
+      }
+    }
+  }
+
+  heroSection.classList.remove("hero-updating");
+  if (hero) {
+    renderHero(heroEl, hero);
+    heroSection.classList.add("hero-flash");
+    setTimeout(() => heroSection.classList.remove("hero-flash"), 900);
+  }
 }
 
 function renderFeatured(el, products) {
