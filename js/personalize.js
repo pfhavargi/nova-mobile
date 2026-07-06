@@ -1,7 +1,7 @@
 /* ============================================================
    PERSONALIZE HELPERS
    ============================================================ */
-
+ 
 function getVisitorUid() {
   let uid = localStorage.getItem("cs_personalize_user_uid");
   if (!uid) {
@@ -10,7 +10,19 @@ function getVisitorUid() {
   }
   return uid;
 }
-
+ 
+// Local, instant record of the visitor's preferred brand — used to
+// reorder the product grid immediately, without waiting on a round
+// trip to Personalize's manifest API. Personalize itself is still the
+// source of truth for the Hero Banner text.
+function getStoredPreferredBrand() {
+  return localStorage.getItem("nova_preferred_brand");
+}
+ 
+function setStoredPreferredBrand(brand) {
+  localStorage.setItem("nova_preferred_brand", brand);
+}
+ 
 async function fetchPersonalizeManifest() {
   if (!CONFIG.ENABLE_PERSONALIZE) return null;
   try {
@@ -28,15 +40,17 @@ async function fetchPersonalizeManifest() {
     return null;
   }
 }
-
+ 
 function getVariantAliasesFromManifest(manifest) {
   if (!manifest || !manifest.experiences) return [];
   return manifest.experiences
     .filter((exp) => exp.activeVariantShortUid !== null && exp.activeVariantShortUid !== undefined)
     .map((exp) => `cs_personalize_${exp.shortUid}_${exp.activeVariantShortUid}`);
 }
-
+ 
 async function setPreferredBrand(brand) {
+  setStoredPreferredBrand(brand);
+ 
   if (!CONFIG.ENABLE_PERSONALIZE) return;
   try {
     await fetch(`${CONFIG.PERSONALIZE_EDGE_URL}/user-attributes`, {
@@ -52,3 +66,4 @@ async function setPreferredBrand(brand) {
     console.warn("Personalize set attribute failed:", err);
   }
 }
+ 
