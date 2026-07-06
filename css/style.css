@@ -1,454 +1,179 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
-
-:root {
-  --bg: #14161a;
-  --bg-elevated: #1d2027;
-  --bg-card: #1a1d24;
-  --border: #2a2e37;
-  --text: #f5f3ef;
-  --text-muted: #9aa0ac;
-  --accent: #3d5afe;
-  --accent-soft: rgba(61, 90, 254, 0.14);
-  --amber: #ffb000;
-  --radius: 14px;
-  --max-width: 1180px;
+/* ============================================================
+   HOMEPAGE LOGIC
+   ============================================================ */
+ 
+let ALL_PRODUCTS = [];
+let ACTIVE_BRAND = "All";
+ 
+async function initHomepage() {
+  const heroEl = document.getElementById("hero-content");
+  const featuredGrid = document.getElementById("featured-grid");
+  const catalogGrid = document.getElementById("catalog-grid");
+  const filterRow = document.getElementById("filter-row");
+ 
+  try {
+    const manifest = await fetchPersonalizeManifest();
+    const variantAliases = getVariantAliasesFromManifest(manifest);
+ 
+    const [heroEntries, products] = await Promise.all([
+      csFetchEntries("hero_banner", variantAliases),
+      csFetchEntries("product"),
+    ]);
+ 
+    const hero = heroEntries[0] || MOCK_HERO;
+    renderHero(heroEl, hero);
+ 
+    ALL_PRODUCTS = products;
+    renderFilterPills(filterRow, products);
+    renderFeatured(featuredGrid, products);
+    renderCatalog(catalogGrid, products);
+  } catch (err) {
+    console.error(err);
+    renderErrorBanner(err.message);
+    heroEl.innerHTML = "";
+    renderHero(heroEl, MOCK_HERO);
+  }
 }
-
-* { box-sizing: border-box; }
-
-html { scroll-behavior: smooth; }
-
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font-family: "Inter", sans-serif;
-  line-height: 1.5;
+ 
+function renderHero(el, hero) {
+  el.innerHTML = `
+    <span class="hero-eyebrow">New arrivals every week</span>
+    <h1>${hero.title}</h1>
+    <p>${hero.subtitle}</p>
+    <a class="btn" href="${hero.button_url || "#catalog"}">${hero.button_text || "Shop Now"}</a>
+  `;
+  if (hero.background_image && hero.background_image.url) {
+    document.querySelector(".hero").style.backgroundImage =
+      `linear-gradient(180deg, rgba(20,22,26,0.75), rgba(20,22,26,0.95)), url(${hero.background_image.url})`;
+    document.querySelector(".hero").style.backgroundSize = "cover";
+    document.querySelector(".hero").style.backgroundPosition = "center";
+  }
 }
-
-h1, h2, h3, .brand-wordmark {
-  font-family: "Space Grotesk", sans-serif;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  margin: 0;
+ 
+function renderFilterPills(el, products) {
+  const brands = ["All", ...new Set(products.map((p) => p.brand))];
+  el.innerHTML = brands
+    .map(
+      (brand) =>
+        `<button class="filter-pill ${brand === ACTIVE_BRAND ? "active" : ""}" data-brand="${brand}">${brand}</button>`
+    )
+    .join("");
+ 
+  el.querySelectorAll(".filter-pill").forEach((pill) => {
+    pill.addEventListener("click", async () => {
+      ACTIVE_BRAND = pill.dataset.brand;
+      el.querySelectorAll(".filter-pill").forEach((p) => p.classList.remove("active"));
+      pill.classList.add("active");
+      renderCatalog(document.getElementById("catalog-grid"), ALL_PRODUCTS);
+ 
+      if (ACTIVE_BRAND !== "All") {
+        await refreshPersonalizedHero(ACTIVE_BRAND);
+      }
+    });
+  });
 }
-
-a { color: inherit; text-decoration: none; }
-
-.mono { font-family: "JetBrains Mono", monospace; }
-
-/* ---------- Layout shell ---------- */
-.shell {
-  max-width: var(--max-width);
-  margin: 0 auto;
-  padding: 0 24px;
+ 
+async function refreshPersonalizedHero(brand) {
+  const heroEl = document.getElementById("hero-content");
+  const heroSection = document.querySelector(".hero");
+ 
+  heroSection.classList.add("hero-updating");
+  await setPreferredBrand(brand);
+ 
+  // Poll briefly since Personalize needs a moment to apply the new attribute
+  let hero = null;
+  for (let attempt = 0; attempt < 6; attempt++) {
+    await new Promise((r) => setTimeout(r, 400));
+    const manifest = await fetchPersonalizeManifest();
+    const aliases = getVariantAliasesFromManifest(manifest);
+    if (aliases.length > 0) {
+      const entries = await csFetchEntries("hero_banner", aliases);
+      if (entries[0]) {
+        hero = entries[0];
+        break;
+      }
+    }
+  }
+ 
+  heroSection.classList.remove("hero-updating");
+  if (hero) {
+    renderHero(heroEl, hero);
+    heroSection.classList.add("hero-flash");
+    setTimeout(() => heroSection.classList.remove("hero-flash"), 900);
+  }
 }
-
-.site-header {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  background: rgba(20, 22, 26, 0.85);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid var(--border);
+ 
+function renderFeatured(el, products) {
+  const featured = products.filter((p) => p.featured);
+  if (featured.length === 0) {
+    el.closest("section").style.display = "none";
+    return;
+  }
+  el.innerHTML = featured.map(productCardHtml).join("");
 }
-
-.site-header .shell {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 72px;
+ 
+function renderCatalog(el, products) {
+  const filtered = ACTIVE_BRAND === "All" ? products : products.filter((p) => p.brand === ACTIVE_BRAND);
+  document.getElementById("catalog-count").textContent = `${filtered.length} model${filtered.length === 1 ? "" : "s"}`;
+ 
+  if (filtered.length === 0) {
+    el.innerHTML = `<div class="empty-state">No phones in this brand yet — add an entry in Contentstack to see it here.</div>`;
+    return;
+  }
+  el.innerHTML = filtered.map(productCardHtml).join("");
 }
-
-.brand-wordmark {
-  font-size: 20px;
+ 
+function productCardHtml(p) {
+  const imageUrl = p.image && p.image.url ? p.image.url : "https://placehold.co/600x700/1D2027/F5F3EF?text=No+Image";
+  const slug = slugify(p.title);
+  return `
+    <a class="spec-ticket" href="product.html?slug=${encodeURIComponent(slug)}" data-brand="${p.brand}">
+      ${p.featured ? '<span class="featured-tag">Featured</span>' : ""}
+      <span class="brand-tag">${p.brand}</span>
+      <img class="ticket-image" src="${imageUrl}" alt="${p.title}" loading="lazy" />
+      <div class="ticket-perforation"></div>
+      <div class="ticket-body">
+        <h3>${p.title}</h3>
+        <div class="ticket-specs">${p.specs || ""}</div>
+        <div class="ticket-price">
+          <span class="amount">${formatPrice(p.price)}</span>
+          <span class="view-link">View →</span>
+        </div>
+      </div>
+    </a>
+  `;
 }
+ 
+document.addEventListener("click", (e) => {
+  const card = e.target.closest(".spec-ticket");
+  if (card && card.dataset.brand) {
+    setPreferredBrand(card.dataset.brand);
+  }
+});
+ 
+document.addEventListener("DOMContentLoaded", initHomepage);
 
-.brand-wordmark span {
-  color: var(--accent);
-}
-
-.main-nav {
-  display: flex;
-  gap: 28px;
-}
-
-.main-nav a {
-  font-size: 14px;
-  color: var(--text-muted);
-  transition: color 0.15s ease;
-}
-
-.main-nav a:hover,
-.main-nav a.active {
-  color: var(--text);
-}
-
-/* ---------- Hero ---------- */
+        /* ---------- Personalize demo effects ---------- */
 .hero {
-  position: relative;
-  padding: 96px 0 80px;
-  overflow: hidden;
-  border-bottom: 1px solid var(--border);
+  transition: box-shadow 0.4s ease;
 }
 
-.hero::before {
-  content: "";
+.hero.hero-updating {
+  opacity: 0.55;
+  transition: opacity 0.2s ease;
+}
+
+.hero.hero-updating::after {
+  content: "Personalizing your experience…";
   position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(circle at 15% 20%, var(--accent-soft), transparent 45%),
-    radial-gradient(circle at 85% 80%, rgba(255, 176, 0, 0.08), transparent 40%);
-  pointer-events: none;
-}
-
-.hero-inner {
-  position: relative;
-  max-width: 640px;
-}
-
-.hero-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+  top: 24px;
+  right: 24px;
   font-family: "JetBrains Mono", monospace;
   font-size: 12px;
   color: var(--amber);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  margin-bottom: 20px;
-}
-
-.hero-eyebrow::before {
-  content: "";
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--amber);
-}
-
-.hero h1 {
-  font-size: clamp(34px, 5vw, 54px);
-  line-height: 1.08;
-  margin-bottom: 20px;
-}
-
-.hero p {
-  color: var(--text-muted);
-  font-size: 17px;
-  max-width: 480px;
-  margin-bottom: 32px;
-}
-
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  background: var(--accent);
-  color: #fff;
-  border: none;
-  padding: 14px 26px;
-  border-radius: 999px;
-  font-family: "Inter", sans-serif;
-  font-weight: 600;
-  font-size: 14px;
-  cursor: pointer;
-  transition: transform 0.15s ease, background 0.15s ease;
-}
-
-.btn:hover {
-  background: #5470ff;
-  transform: translateY(-1px);
-}
-
-.btn-ghost {
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text);
-}
-
-.btn-ghost:hover {
-  background: var(--bg-elevated);
-}
-
-/* ---------- Brand filter pills ---------- */
-.filter-row {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin: 40px 0 32px;
-}
-
-.filter-pill {
-  font-family: "JetBrains Mono", monospace;
-  font-size: 13px;
-  padding: 9px 18px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  color: var(--text-muted);
-  background: transparent;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.filter-pill:hover {
-  border-color: var(--accent);
-  color: var(--text);
-}
-
-.filter-pill.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-}
-
-/* ---------- Section headings ---------- */
-.section {
-  padding: 56px 0;
-}
-
-.section-heading {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  margin-bottom: 28px;
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 16px;
-}
-
-.section-heading h2 {
-  font-size: 24px;
-}
-
-.section-heading .count {
-  font-family: "JetBrains Mono", monospace;
-  font-size: 13px;
-  color: var(--text-muted);
-}
-
-/* ---------- Product grid: "spec ticket" cards ---------- */
-.product-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 22px;
-}
-
-.spec-ticket {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  transition: border-color 0.15s ease, transform 0.15s ease;
-  position: relative;
-}
-
-.spec-ticket:hover {
-  border-color: var(--accent);
-  transform: translateY(-3px);
-}
-
-.spec-ticket .featured-tag {
-  position: absolute;
-  top: 14px;
-  left: 14px;
-  z-index: 2;
-  background: var(--amber);
-  color: #14161a;
-  font-family: "JetBrains Mono", monospace;
-  font-size: 11px;
-  font-weight: 500;
-  padding: 4px 10px;
-  border-radius: 999px;
   letter-spacing: 0.04em;
 }
 
-.spec-ticket .brand-tag {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  z-index: 2;
-  font-family: "JetBrains Mono", monospace;
-  font-size: 11px;
-  color: var(--text-muted);
-  background: rgba(20, 22, 26, 0.7);
-  padding: 4px 10px;
-  border-radius: 999px;
-}
-
-.spec-ticket .ticket-image {
-  aspect-ratio: 4 / 5;
-  background: var(--bg-elevated);
-  display: block;
-  width: 100%;
-  object-fit: cover;
-}
-
-.ticket-perforation {
-  position: relative;
-  height: 1px;
-  background: repeating-linear-gradient(to right, var(--border) 0 6px, transparent 6px 12px);
-}
-
-.ticket-perforation::before,
-.ticket-perforation::after {
-  content: "";
-  position: absolute;
-  top: -7px;
-  width: 14px;
-  height: 14px;
-  background: var(--bg);
-  border-radius: 50%;
-}
-
-.ticket-perforation::before { left: -7px; }
-.ticket-perforation::after { right: -7px; }
-
-.ticket-body {
-  padding: 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  flex: 1;
-}
-
-.ticket-body h3 {
-  font-size: 17px;
-}
-
-.ticket-specs {
-  font-family: "JetBrains Mono", monospace;
-  font-size: 12px;
-  color: var(--accent);
-  line-height: 1.6;
-}
-
-.ticket-price {
-  margin-top: auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-top: 12px;
-}
-
-.ticket-price .amount {
-  font-family: "JetBrains Mono", monospace;
-  font-size: 18px;
-  font-weight: 500;
-}
-
-.ticket-price .view-link {
-  font-size: 13px;
-  color: var(--text-muted);
-}
-
-.spec-ticket:hover .ticket-price .view-link {
-  color: var(--accent);
-}
-
-/* ---------- Product detail page ---------- */
-.product-detail {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 56px;
-  padding: 56px 0 80px;
-  align-items: start;
-}
-
-.breadcrumb {
-  padding-top: 28px;
-  font-family: "JetBrains Mono", monospace;
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.breadcrumb a { color: var(--accent); }
-
-.product-detail img {
-  width: 100%;
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
-  aspect-ratio: 4/5;
-  object-fit: cover;
-}
-
-.product-detail .brand-tag {
-  display: inline-block;
-  font-family: "JetBrains Mono", monospace;
-  font-size: 12px;
-  color: var(--accent);
-  background: var(--accent-soft);
-  padding: 5px 12px;
-  border-radius: 999px;
-  margin-bottom: 16px;
-}
-
-.product-detail h1 {
-  font-size: 32px;
-  margin-bottom: 16px;
-}
-
-.product-detail .amount {
-  font-family: "JetBrains Mono", monospace;
-  font-size: 26px;
-  margin-bottom: 20px;
-  display: block;
-}
-
-.product-detail .description {
-  color: var(--text-muted);
-  margin-bottom: 28px;
-}
-
-.spec-sheet {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 20px;
-  font-family: "JetBrains Mono", monospace;
-  font-size: 13px;
-  color: var(--text-muted);
-  margin-bottom: 28px;
-  white-space: pre-line;
-}
-
-.spec-sheet-label {
-  color: var(--amber);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-size: 11px;
-  display: block;
-  margin-bottom: 10px;
-}
-
-/* ---------- Footer ---------- */
-.site-footer {
-  border-top: 1px solid var(--border);
-  padding: 32px 0;
-  color: var(--text-muted);
-  font-size: 13px;
-}
-
-/* ---------- States ---------- */
-.empty-state, .loading-state {
-  padding: 60px 0;
-  text-align: center;
-  color: var(--text-muted);
-  font-family: "JetBrains Mono", monospace;
-  font-size: 14px;
-}
-
-.cs-error-banner {
-  background: #3a1414;
-  border-bottom: 1px solid #6b2323;
-  color: #ffb3b3;
-  font-size: 13px;
-  padding: 12px 24px;
-  font-family: "JetBrains Mono", monospace;
-}
-
-/* ---------- Responsive ---------- */
-@media (max-width: 720px) {
-  .main-nav { display: none; }
-  .product-detail { grid-template-columns: 1fr; gap: 28px; }
+.hero.hero-flash {
+  box-shadow: inset 0 0 0 2px var(--amber);
 }
