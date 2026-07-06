@@ -6,7 +6,7 @@
    You should not need to edit this file.
    ============================================================ */
 
-async function csFetchEntries(contentTypeUid) {
+async function csFetchEntries(contentTypeUid, variantAliases) {
   if (CONFIG.USE_MOCK_DATA) {
     if (contentTypeUid === "product") return MOCK_PRODUCTS;
     if (contentTypeUid === "hero_banner") return [MOCK_HERO];
@@ -16,12 +16,15 @@ async function csFetchEntries(contentTypeUid) {
   const baseUrl = REGION_BASE_URLS[CONFIG.REGION];
   const url = `${baseUrl}/v3/content_types/${contentTypeUid}/entries?environment=${CONFIG.ENVIRONMENT}`;
 
-  const response = await fetch(url, {
-    headers: {
-      api_key: CONFIG.API_KEY,
-      access_token: CONFIG.DELIVERY_TOKEN,
-    },
-  });
+  const headers = {
+    api_key: CONFIG.API_KEY,
+    access_token: CONFIG.DELIVERY_TOKEN,
+  };
+  if (variantAliases && variantAliases.length > 0) {
+    headers["x-cs-variant-uid"] = variantAliases.join(",");
+  }
+
+  const response = await fetch(url, { headers });
 
   if (!response.ok) {
     const body = await response.text();
@@ -61,14 +64,6 @@ async function csFetchEntryByUrl(contentTypeUid, urlPath) {
   return (data.entries && data.entries[0]) || null;
 }
 
-function formatPrice(amount) {
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
-
 function slugify(str) {
   return (str || "")
     .toString()
@@ -76,6 +71,14 @@ function slugify(str) {
     .trim()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
+}
+
+function formatPrice(amount) {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(amount);
 }
 
 function renderErrorBanner(message) {
